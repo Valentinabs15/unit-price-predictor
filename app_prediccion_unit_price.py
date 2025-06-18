@@ -27,12 +27,12 @@ def cargar_modelos():
     modelos = {{i: joblib.load(f"{ruta}/modelo_cluster_{{i}}_General.pkl") for i in range(4)}}
     return scaler, kmeans, modelos
 
-nombres_cluster = {{
+nombres_cluster = {
     0: "Gran Tronadura",
     1: "Tronadura Fuerte",
     2: "Tronadura Intermedia",
     3: "Tronadura Estándar"
-}}
+}
 
 zonas = ['Centro', 'Norte Chico', 'Norte Grande', 'Sur']
 campos = [
