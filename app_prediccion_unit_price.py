@@ -10,11 +10,11 @@ def set_background(image_path):
     st.markdown(
         f"""
         <style>
-        .stApp {{
+        .stApp {
             background-image: url('data:image/jpg;base64,{encoded.decode("latin1")}');
             background-size: cover;
             background-attachment: fixed;
-        }}
+        }
         </style>
         """, unsafe_allow_html=True)
 
