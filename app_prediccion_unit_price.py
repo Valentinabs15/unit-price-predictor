@@ -11,7 +11,7 @@ def set_background(image_path):
         f"""
         <style>
         .stApp {
-            background-image: url('data:image/jpg;base64,{encoded.decode("latin1")}');
+            background-image: url('data:image/jpg;base64,{base64.b64encode(encoded).decode()}');
             background-size: cover;
             background-attachment: fixed;
         }
