@@ -27,7 +27,7 @@ def cargar_modelos():
     ruta = "."
     scaler = joblib.load(f"{ruta}/scaler.pkl")
     kmeans = joblib.load(f"{ruta}/kmeans.pkl")
-    modelos = {i: joblib.load(f"{ruta}/modelo_cluster_{{i}}_General.pkl") for i in range(4)}
+    modelos = {i: joblib.load(f"{ruta}/modelo_cluster_{i}_General.pkl") for i in range(4)}
     return scaler, kmeans, modelos
 
 nombres_cluster = {
