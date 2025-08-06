@@ -3,8 +3,7 @@ import streamlit as st
 import numpy as np
 import joblib
 
-# === Estilos con fondo ===
-
+# === Estilos con fondo y overlay ===
 def set_background(image_path):
     with open(image_path, "rb") as f:
         encoded = base64.b64encode(f.read()).decode()
@@ -12,9 +11,26 @@ def set_background(image_path):
         f"""
         <style>
         .stApp {{
-            background-image: url("data:image/jpg;base64,{encoded}");
+            background-image: linear-gradient(rgba(0,0,0,0.55), rgba(0,0,0,0.55)),
+                              url("data:image/jpg;base64,{encoded}");
             background-size: cover;
             background-attachment: fixed;
+        }}
+        .title-container {{
+            background-color: rgba(0, 0, 0, 0.6);
+            padding: 15px;
+            border-radius: 12px;
+            text-align: center;
+            margin-bottom: 15px;
+        }}
+        .title-text {{
+            color: white;
+            font-size: 34px;
+            font-weight: bold;
+        }}
+        .subtitle-text {{
+            color: white;
+            font-size: 18px;
         }}
         </style>
         """,
@@ -49,10 +65,11 @@ campos = [
 
 def predecir_varios_periodos(volume, zona_str, lista_valores_por_periodo, scaler, kmeans, modelos):
     zona_id = zonas.index(zona_str)
-    cluster_input = np.array([[volume, zona_id, 0]])  # Padding con 0 si el scaler espera 3
+    # Escalado para clustering
+    cluster_input = np.array([[volume, zona_id, 0]])  
     cluster_scaled = scaler.transform(cluster_input)
     cluster = kmeans.predict(cluster_scaled)[0]
-    nombre_cluster = nombres_cluster.get(cluster, f"Cluster {{cluster}}")
+    nombre_cluster = nombres_cluster.get(cluster, f"Cluster {cluster}")
 
     modelo = modelos.get(cluster)
     if modelo is None:
@@ -60,6 +77,7 @@ def predecir_varios_periodos(volume, zona_str, lista_valores_por_periodo, scaler
 
     predicciones = []
     for valores in lista_valores_por_periodo:
+        # volume + todas las variables macroeconómicas
         X_pred = np.array([volume] + valores).reshape(1, -1)
         precio_estimado = modelo.predict(X_pred)[0]
         predicciones.append(precio_estimado)
@@ -68,11 +86,19 @@ def predecir_varios_periodos(volume, zona_str, lista_valores_por_periodo, scaler
 
 # === App ===
 set_background("fondo.jpg")
-st.title("🔍 Predicción de Precio Unitario")
-st.markdown("Simula escenarios por zona y volumen con variables macroeconómicas")
+
+# Título y subtítulo con overlay
+st.markdown(
+    '<div class="title-container">'
+    '<div class="title-text">🔍 Predicción de Precio Unitario</div>'
+    '<div class="subtitle-text">Simula escenarios por zona y volumen con variables macroeconómicas</div>'
+    '</div>',
+    unsafe_allow_html=True
+)
 
 scaler, kmeans, modelos = cargar_modelos()
 
+# Entradas
 volume = st.number_input("📦 Volumen (toneladas)", min_value=0.0, value=200.0)
 zona = st.selectbox("📍 Zona", zonas)
 
@@ -86,12 +112,13 @@ for i in range(periodos):
         valores.append(val)
     lista_valores.append(valores)
 
-if st.button("Predecir"):
+# Botón de predicción
+if st.button("📈 Predecir"):
     resultado = predecir_varios_periodos(volume, zona, lista_valores, scaler, kmeans, modelos)
     if resultado:
         cluster_id, cluster_nombre, predicciones = resultado
         st.success(f"📌 Cluster: {cluster_id} - {cluster_nombre}")
         for i, pred in enumerate(predicciones):
-            st.write(f"📊 Período {i+1}: **${pred:.2f}**")
+            st.write(f"📊 Período {i+1}: **${pred:.2f} AUD/Ton**")
     else:
         st.error("❌ No se encontró modelo para el clúster.")
