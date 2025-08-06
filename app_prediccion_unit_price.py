@@ -63,10 +63,15 @@ campos = [
     "ENAP Diesel"
 ]
 
+# === Función de predicción ===
 def predecir_varios_periodos(volume, zona_str, lista_valores_por_periodo, scaler, kmeans, modelos):
     zona_id = zonas.index(zona_str)
-    # Escalado para clustering
-    cluster_input = np.array([[volume, zona_id, 0]])  
+
+    # Usamos el primer período como referencia para asignar clúster
+    primer_periodo = lista_valores_por_periodo[0]
+
+    # Este array debe tener el mismo número de columnas y orden que en el entrenamiento de kmeans/scaler
+    cluster_input = np.array([[volume, zona_id] + primer_periodo])
     cluster_scaled = scaler.transform(cluster_input)
     cluster = kmeans.predict(cluster_scaled)[0]
     nombre_cluster = nombres_cluster.get(cluster, f"Cluster {cluster}")
@@ -75,9 +80,9 @@ def predecir_varios_periodos(volume, zona_str, lista_valores_por_periodo, scaler
     if modelo is None:
         return None
 
+    # Predecir para cada período
     predicciones = []
     for valores in lista_valores_por_periodo:
-        # volume + todas las variables macroeconómicas
         X_pred = np.array([volume] + valores).reshape(1, -1)
         precio_estimado = modelo.predict(X_pred)[0]
         predicciones.append(precio_estimado)
@@ -87,7 +92,7 @@ def predecir_varios_periodos(volume, zona_str, lista_valores_por_periodo, scaler
 # === App ===
 set_background("fondo.jpg")
 
-# Título y subtítulo con overlay
+# Título y subtítulo
 st.markdown(
     '<div class="title-container">'
     '<div class="title-text">🔍 Predicción de Precio Unitario</div>'
@@ -96,9 +101,10 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+# Cargar modelos
 scaler, kmeans, modelos = cargar_modelos()
 
-# Entradas
+# Entradas del usuario
 volume = st.number_input("📦 Volumen (toneladas)", min_value=0.0, value=200.0)
 zona = st.selectbox("📍 Zona", zonas)
 
