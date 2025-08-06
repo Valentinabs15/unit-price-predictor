@@ -46,7 +46,6 @@ def cargar_modelos():
     modelos = {i: joblib.load(f"{ruta}/modelo_cluster_{i}_General.pkl") for i in range(4)}
     return scaler, kmeans, modelos
 
-# Diccionario de nombres de clúster corregido
 nombres_cluster = {
     0: "Gran Tronadura",
     1: "Tronadura Fuerte",
@@ -64,12 +63,30 @@ campos = [
     "ENAP Diesel"
 ]
 
-# === Función de predicción ===
+# === Función de predicción con logs ===
 def predecir_precio(volume, zona_str, valores_macro, scaler, kmeans, modelos):
     zona_id = zonas.index(zona_str)
 
-    # Input para clustering
-    cluster_input = np.array([[volume, zona_id] + valores_macro])
+    # Ver cuántas columnas espera el scaler
+    n_features = scaler.n_features_in_
+    st.write("🔍 Scaler espera columnas:", n_features)
+
+    # Datos que vamos a pasar
+    features = [volume, zona_id] + valores_macro
+    st.write("📦 Columnas que envío (antes de ajuste):", len(features))
+    st.write("📦 Datos (antes de ajuste):", features)
+
+    # Ajustar para que coincida con lo que espera el scaler
+    if len(features) < n_features:
+        features += [0] * (n_features - len(features))
+    elif len(features) > n_features:
+        features = features[:n_features]
+
+    st.write("✅ Columnas después de ajuste:", len(features))
+    st.write("✅ Datos después de ajuste:", features)
+
+    # Input final para clustering
+    cluster_input = np.array([features])
     cluster_scaled = scaler.transform(cluster_input)
     cluster = kmeans.predict(cluster_scaled)[0]
     nombre_cluster = nombres_cluster.get(cluster, f"Cluster {cluster}")
@@ -78,7 +95,7 @@ def predecir_precio(volume, zona_str, valores_macro, scaler, kmeans, modelos):
     if modelo is None:
         return None
 
-    # Input para predicción final
+    # Input para predicción final (usando todas las macro que reciba el modelo)
     X_pred = np.array([volume] + valores_macro).reshape(1, -1)
     precio_estimado = modelo.predict(X_pred)[0]
 
@@ -87,7 +104,7 @@ def predecir_precio(volume, zona_str, valores_macro, scaler, kmeans, modelos):
 # === App ===
 set_background("fondo.jpg")
 
-# Título y subtítulo
+# Título
 st.markdown(
     '<div class="title-container">'
     '<div class="title-text">🔍 Predicción de Precio Unitario</div>'
@@ -105,7 +122,7 @@ zona = st.selectbox("📍 Zona", zonas)
 
 st.markdown("### 📊 Variables Macroeconómicas")
 
-# Etiquetas con estilo mejorado
+# Variables macroeconómicas con estilo legible
 valores_macro = []
 for campo in campos:
     st.markdown(
