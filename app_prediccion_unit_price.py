@@ -64,14 +64,11 @@ campos = [
 ]
 
 # === Función de predicción ===
-def predecir_varios_periodos(volume, zona_str, lista_valores_por_periodo, scaler, kmeans, modelos):
+def predecir_precio(volume, zona_str, valores_macro, scaler, kmeans, modelos):
     zona_id = zonas.index(zona_str)
 
-    # Usamos el primer período como referencia para asignar clúster
-    primer_periodo = lista_valores_por_periodo[0]
-
-    # Este array debe tener el mismo número de columnas y orden que en el entrenamiento de kmeans/scaler
-    cluster_input = np.array([[volume, zona_id] + primer_periodo])
+    # Input para clustering
+    cluster_input = np.array([[volume, zona_id] + valores_macro])
     cluster_scaled = scaler.transform(cluster_input)
     cluster = kmeans.predict(cluster_scaled)[0]
     nombre_cluster = nombres_cluster.get(cluster, f"Cluster {cluster}")
@@ -80,14 +77,11 @@ def predecir_varios_periodos(volume, zona_str, lista_valores_por_periodo, scaler
     if modelo is None:
         return None
 
-    # Predecir para cada período
-    predicciones = []
-    for valores in lista_valores_por_periodo:
-        X_pred = np.array([volume] + valores).reshape(1, -1)
-        precio_estimado = modelo.predict(X_pred)[0]
-        predicciones.append(precio_estimado)
+    # Input para predicción final
+    X_pred = np.array([volume] + valores_macro).reshape(1, -1)
+    precio_estimado = modelo.predict(X_pred)[0]
 
-    return cluster, nombre_cluster, predicciones
+    return cluster, nombre_cluster, precio_estimado
 
 # === App ===
 set_background("fondo.jpg")
@@ -104,27 +98,22 @@ st.markdown(
 # Cargar modelos
 scaler, kmeans, modelos = cargar_modelos()
 
-# Entradas del usuario
+# Entradas
 volume = st.number_input("📦 Volumen (toneladas)", min_value=0.0, value=200.0)
 zona = st.selectbox("📍 Zona", zonas)
 
-periodos = st.number_input("🗓️ N° de períodos", min_value=1, max_value=12, value=1)
-lista_valores = []
-for i in range(periodos):
-    st.markdown(f"#### 🔁 Período {i+1}")
-    valores = []
-    for campo in campos:
-        val = st.number_input(f"{campo} (Período {i+1})", value=0.0, key=f"{campo}_{i}")
-        valores.append(val)
-    lista_valores.append(valores)
+st.markdown("### 📊 Variables Macroeconómicas")
+valores_macro = []
+for campo in campos:
+    val = st.number_input(campo, value=0.0)
+    valores_macro.append(val)
 
 # Botón de predicción
 if st.button("📈 Predecir"):
-    resultado = predecir_varios_periodos(volume, zona, lista_valores, scaler, kmeans, modelos)
+    resultado = predecir_precio(volume, zona, valores_macro, scaler, kmeans, modelos)
     if resultado:
-        cluster_id, cluster_nombre, predicciones = resultado
+        cluster_id, cluster_nombre, prediccion = resultado
         st.success(f"📌 Cluster: {cluster_id} - {cluster_nombre}")
-        for i, pred in enumerate(predicciones):
-            st.write(f"📊 Período {i+1}: **${pred:.2f} AUD/Ton**")
+        st.write(f"📊 Precio proyectado: **${prediccion:.2f} AUD/Ton**")
     else:
         st.error("❌ No se encontró modelo para el clúster.")
