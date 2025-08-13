@@ -3,7 +3,7 @@ import numpy as np
 import joblib
 import pandas as pd
 
-# --- 1. Cargar modelos ---
+# --- 1. Cargar modelos y definir mapeos ---
 @st.cache_resource
 def cargar_modelos_y_definir():
     """Carga los modelos, escaladores y define los mapeos."""
@@ -63,7 +63,7 @@ def predecir_varios_periodos(volume, zona_str, lista_valores_por_periodo, scaler
 
     predicciones = []
     for valores in lista_valores_por_periodo:
-        # 📌 Corregido para construir el DataFrame de entrada completo para el modelo
+        # Corregido para construir el DataFrame de entrada completo para el modelo
         data_pred = pd.DataFrame([[volume, zona_id] + valores], columns=campos_modelo)
         
         # El pipeline del modelo se encarga del escalado automáticamente
