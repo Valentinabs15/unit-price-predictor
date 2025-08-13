@@ -1,143 +1,122 @@
-import base64
 import streamlit as st
 import numpy as np
 import joblib
+import pandas as pd
 
-# === Estilos con fondo y overlay ===
-def set_background(image_path):
-    with open(image_path, "rb") as f:
-        encoded = base64.b64encode(f.read()).decode()
-    st.markdown(
-        f"""
-        <style>
-        .stApp {{
-            background-image: linear-gradient(rgba(0,0,0,0.55), rgba(0,0,0,0.55)),
-                              url("data:image/jpg;base64,{encoded}");
-            background-size: cover;
-            background-attachment: fixed;
-        }}
-        .title-container {{
-            background-color: rgba(0, 0, 0, 0.6);
-            padding: 15px;
-            border-radius: 12px;
-            text-align: center;
-            margin-bottom: 15px;
-        }}
-        .title-text {{
-            color: white;
-            font-size: 34px;
-            font-weight: bold;
-        }}
-        .subtitle-text {{
-            color: white;
-            font-size: 18px;
-        }}
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
-
-# === Cargar modelos ===
+# --- 1. Cargar modelos ---
 @st.cache_resource
-def cargar_modelos():
-    ruta = "."
-    scaler = joblib.load(f"{ruta}/scaler.pkl")
-    kmeans = joblib.load(f"{ruta}/kmeans.pkl")
-    modelos = {i: joblib.load(f"{ruta}/modelo_cluster_{i}_General.pkl") for i in range(4)}
-    return scaler, kmeans, modelos
+def cargar_modelos_y_definir():
+    """Carga los modelos, escaladores y define los mapeos."""
+    try:
+        # Cargar los archivos necesarios
+        scaler_cluster = joblib.load("scaler_cluster.pkl")
+        kmeans = joblib.load("kmeans.pkl")
+        modelos = {i: joblib.load(f"modelo_cluster_{i}_General.pkl") for i in range(4)}
+        
+        # Mapeo de nombres de clúster a sus IDs
+        nombres_cluster = {
+            0: "Gran Tronadura",
+            1: "Tronadura Fuerte",
+            2: "Tronadura Intermedia",
+            3: "Tronadura Estándar"
+        }
+        
+        # Mapeo de zona para el clustering
+        zonas_map = {
+            'Gran Tronadura': 0,
+            'Tronadura Fuerte': 1,
+            'Tronadura Intermedia': 2,
+            'Tronadura Estándar': 3
+        }
+        
+        campos_modelo = [
+            "Volume", "Zone", "CLP_USD_FX_MONTHLY", "IPC_BASE2018_CP_CL_MONTHLY",
+            "FERT_ARGUS_AMM_CARIB_USSPOT_AVG_MTHLY", "FERTECON_AGAN_BLACKSEA_FOB_MTHLY_MP",
+            "CPI_USA_MONTHLY", "FUENTE_ENAP_CHL_DL_MONTHLY"
+        ]
+        
+        return scaler_cluster, kmeans, modelos, nombres_cluster, zonas_map, campos_modelo
 
-nombres_cluster = {
-    0: "Gran Tronadura",
-    1: "Tronadura Fuerte",
-    2: "Tronadura Intermedia",
-    3: "Tronadura Estándar"
-}
+    except FileNotFoundError as e:
+        st.error(f"❌ Error al cargar archivos del modelo: {e.filename}. Asegúrate de que todos los archivos .pkl están en la misma carpeta.")
+        return None, None, None, None, None, None
 
-zonas = ['Centro', 'Norte Chico', 'Norte Grande', 'Sur']
-campos = [
-    "CLP/USD",
-    "IPC CL",
-    "FERT AMM",
-    "FERTECON",
-    "CPI USA",
-    "ENAP Diesel"
-]
+# --- 2. Función de Predicción ---
+def predecir_varios_periodos(volume, zona_str, lista_valores_por_periodo, scaler_cluster, kmeans, modelos, nombres_cluster, zonas_map, campos_modelo):
+    """Realiza la predicción para múltiples períodos."""
+    
+    # Obtener el ID numérico de la zona/clúster
+    zona_id = zonas_map.get(zona_str)
+    if zona_id is None:
+        st.error(f"Zona '{zona_str}' no es válida.")
+        return None
 
-# === Función de predicción con logs ===
-def predecir_precio(volume, zona_str, valores_macro, scaler, kmeans, modelos):
-    zona_id = zonas.index(zona_str)
-
-    # Ver cuántas columnas espera el scaler
-    n_features = scaler.n_features_in_
-    st.write("🔍 Scaler espera columnas:", n_features)
-
-    # Datos que vamos a pasar
-    features = [volume, zona_id] + valores_macro
-    st.write("📦 Columnas que envío (antes de ajuste):", len(features))
-    st.write("📦 Datos (antes de ajuste):", features)
-
-    # Ajustar para que coincida con lo que espera el scaler
-    if len(features) < n_features:
-        features += [0] * (n_features - len(features))
-    elif len(features) > n_features:
-        features = features[:n_features]
-
-    st.write("✅ Columnas después de ajuste:", len(features))
-    st.write("✅ Datos después de ajuste:", features)
-
-    # Input final para clustering
-    cluster_input = np.array([features])
-    cluster_scaled = scaler.transform(cluster_input)
+    # Asignar el clúster usando el modelo KMeans
+    cluster_input = pd.DataFrame([[volume, zona_id]], columns=['Volume', 'Zone'])
+    cluster_scaled = scaler_cluster.transform(cluster_input)
     cluster = kmeans.predict(cluster_scaled)[0]
-    nombre_cluster = nombres_cluster.get(cluster, f"Cluster {cluster}")
-
+    nombre_cluster = nombres_cluster.get(cluster, f"Clúster {cluster}")
+    
     modelo = modelos.get(cluster)
     if modelo is None:
         return None
 
-    # Input para predicción final (usando todas las macro que reciba el modelo)
-    X_pred = np.array([volume] + valores_macro).reshape(1, -1)
-    precio_estimado = modelo.predict(X_pred)[0]
+    predicciones = []
+    for valores in lista_valores_por_periodo:
+        # 📌 Corregido para construir el DataFrame de entrada completo para el modelo
+        data_pred = pd.DataFrame([[volume, zona_id] + valores], columns=campos_modelo)
+        
+        # El pipeline del modelo se encarga del escalado automáticamente
+        precio_estimado = modelo.predict(data_pred)[0]
+        predicciones.append(precio_estimado)
 
-    return cluster, nombre_cluster, precio_estimado
+    return cluster, nombre_cluster, predicciones
 
-# === App ===
-set_background("fondo.jpg")
+# --- 3. Interfaz Streamlit ---
+st.title("Predicción de Precio Unitario por Cliente")
+st.markdown("Basado en modelos segmentados por clúster y variables macroeconómicas")
 
-# Título
-st.markdown(
-    '<div class="title-container">'
-    '<div class="title-text">🔍 Predicción de Precio Unitario</div>'
-    '<div class="subtitle-text">Simula escenarios por zona y volumen con variables macroeconómicas</div>'
-    '</div>',
-    unsafe_allow_html=True
-)
+scaler_cluster, kmeans, modelos, nombres_cluster, zonas_map, campos_modelo = cargar_modelos_y_definir()
 
-# Cargar modelos
-scaler, kmeans, modelos = cargar_modelos()
+if not all([scaler_cluster, kmeans, modelos, nombres_cluster, zonas_map, campos_modelo]):
+    st.stop()
 
-# Entradas
-volume = st.number_input("📦 Volumen (toneladas)", min_value=0.0, value=200.0)
-zona = st.selectbox("📍 Zona", zonas)
+# Campos de entrada
+st.markdown("---")
+st.markdown("### 1. Datos del Cliente")
+col1, col2 = st.columns(2)
+with col1:
+    volume = st.number_input("Volumen (ton)", min_value=0.0, value=200.0)
+with col2:
+    zona = st.selectbox("Zona del cliente", options=list(zonas_map.keys()))
 
-st.markdown("### 📊 Variables Macroeconómicas")
+st.markdown("---")
+st.markdown("### 2. Variables Económicas por Período")
+periodos = st.number_input("¿Cuántos períodos quieres predecir?", min_value=1, max_value=12, value=1)
 
-# Variables macroeconómicas con estilo legible
-valores_macro = []
-for campo in campos:
-    st.markdown(
-        f"<span style='color:white;font-weight:bold;background-color:rgba(0,0,0,0.5);padding:4px;border-radius:4px'>{campo}</span>",
-        unsafe_allow_html=True
-    )
-    val = st.number_input("", value=0.0, key=campo)
-    valores_macro.append(val)
+lista_valores = []
+campos_economicos = campos_modelo[2:]
+for i in range(periodos):
+    st.subheader(f"Período {i+1}")
+    valores = []
+    cols = st.columns(3)
+    for idx, campo in enumerate(campos_economicos):
+        with cols[idx % 3]:
+            val = st.number_input(f"{campo}", value=0.0, key=f"p{i+1}_{campo}")
+            valores.append(val)
+    lista_valores.append(valores)
+    st.markdown("---")
 
 # Botón de predicción
-if st.button("📈 Predecir"):
-    resultado = predecir_precio(volume, zona, valores_macro, scaler, kmeans, modelos)
+if st.button("Predecir", use_container_width=True):
+    with st.spinner('Calculando predicción...'):
+        resultado = predecir_varios_periodos(volume, zona, lista_valores, scaler_cluster, kmeans, modelos, nombres_cluster, zonas_map, campos_modelo)
+    
     if resultado:
-        cluster_id, cluster_nombre, prediccion = resultado
-        st.success(f"📌 Cluster: {cluster_id} - {cluster_nombre}")
-        st.write(f"📊 Precio proyectado: **${prediccion:.2f} AUD/Ton**")
+        cluster_id, cluster_nombre, predicciones = resultado
+        st.success(f"📌 **Clúster asignado:** {cluster_nombre} (ID: {cluster_id})")
+        st.markdown("### Predicciones por Período")
+        for i, pred in enumerate(predicciones):
+            st.write(f"🗓️ **Período {i+1}:** **${pred:,.2f}**")
     else:
-        st.error("❌ No se encontró modelo para el clúster.")
+        st.error("No se pudo realizar la predicción. Revisa los datos de entrada y que los modelos estén cargados correctamente.")
